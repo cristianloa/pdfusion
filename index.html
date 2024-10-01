@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <title>Unir PDFs</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <style>
+        
+    </style>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+</head>
+<body>
+    <section>
+        <div id="formpdf">
+            <h1>Unir archivos PDF</h1>
+
+            <form id="pdfForm">
+                <input type="file" id="pdfFiles" accept="application/pdf" multiple />
+                <button class="unir-btn" type="submit">Unir PDFs</button>
+            </form>
+
+            <ul id="fileList" class="file-list"></ul>
+            
+            <button id="clearList"><i class="fas fa-trash"></i>Limpiar lista</button>
+            <a id="downloadLink" style="display:none">Descargar PDF Unificado</a>
+            
+        </div>
+    </section>
+
+    <script src="https://unpkg.com/pdf-lib"></script>
+    <script>
+        const form = document.getElementById('pdfForm');
+        const fileList = document.getElementById('fileList');
+        const downloadLink = document.getElementById('downloadLink');
+        const clearListBtn = document.getElementById('clearList');
+        let selectedFiles = [];
+
+        // Manejar la selección de archivos
+        document.getElementById('pdfFiles').addEventListener('change', (e) => {
+            const files = e.target.files;
+            for (const file of files) {
+                addFileToList(file);
+                selectedFiles.push(file);
+            }
+            e.target.value = ""; // Limpiar el input de archivos
+        });
+
+        // Añadir archivo a la lista visible con vista previa pequeña
+        function addFileToList(file) {
+            const li = document.createElement('li');
+            li.draggable = true; // Hacer que el archivo sea arrastrable
+            li.classList.add('file-item'); // Añadir clase para identificar los elementos arrastrables
+
+            // Crear imagen para vista previa
+            const img = document.createElement('img');
+            img.style.width = '100px';
+            img.style.height = '140px';
+            li.appendChild(img);
+
+            const fileReader = new FileReader();
+            fileReader.onload = async function() {
+                const typedarray = new Uint8Array(this.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                const page = await pdf.getPage(1); // Obtener la primera página del PDF
+                const viewport = page.getViewport({ scale: 0.2 });
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                }).promise;
+
+                img.src = canvas.toDataURL(); // Asignar miniatura
+            };
+            fileReader.readAsArrayBuffer(file);
+            
+            li.appendChild(document.createTextNode(file.name));
+
+            // Botón para eliminar el archivo de la lista
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Eliminar';
+            removeBtn.onclick = () => {
+                li.remove();
+                selectedFiles = selectedFiles.filter(f => f.name !== file.name);
+            };
+            
+            li.appendChild(removeBtn);
+            fileList.appendChild(li);
+
+            // Eventos para arrastrar y soltar
+            li.addEventListener('dragstart', () => {
+                li.classList.add('dragging');
+            });
+
+            li.addEventListener('dragend', () => {
+                li.classList.remove('dragging');
+            });
+
+            fileList.addEventListener('dragover', (e) => {
+                e.preventDefault(); // Prevenir el comportamiento por defecto del dragover
+                const draggingItem = document.querySelector('.dragging');
+                const siblings = [...fileList.querySelectorAll('.file-item:not(.dragging)')];
+                const nextSibling = siblings.find(sibling => e.clientY <= sibling.getBoundingClientRect().top + sibling.offsetHeight / 2);
+                fileList.insertBefore(draggingItem, nextSibling);
+            });
+        }
+
+        // Enviar el formulario para unir PDFs
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (selectedFiles.length < 2) return alert("Sube al menos dos archivos PDF.");
+
+            const mergedPdf = await PDFLib.PDFDocument.create();
+            for (const file of selectedFiles) {
+                const pdfBytes = await file.arrayBuffer();
+                const pdf = await PDFLib.PDFDocument.load(pdfBytes);
+                const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                copiedPages.forEach((page) => mergedPdf.addPage(page));
+            }
+
+            const mergedPdfBytes = await mergedPdf.save();
+            const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+
+            // Mostrar enlace de descarga 
+            downloadLink.href = url;
+            downloadLink.style.display = 'inline-block';
+            downloadLink.textContent = 'Descargar PDF Unificado';
+            downloadLink.download = 'nuevo-pdf-clh.pdf';
+        });
+
+        // Limpiar la lista de archivos seleccionados
+        clearListBtn.addEventListener('click', () => {
+            fileList.innerHTML = ''; // Vacía la lista visual
+            selectedFiles = [];      // Reinicia la lista interna de archivos
+            downloadLink.style.display = 'none'; // Oculta el enlace de descarga
+        });
+    </script>
+    
+</body>
+</html>
+<!--  -->
